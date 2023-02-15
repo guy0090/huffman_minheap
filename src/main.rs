@@ -7,10 +7,17 @@ use lib::{hex_to_bytes, MinHeap, Node};
 use std::collections::BTreeMap;
 
 fn main() {
-    let hex = "81000000000000000B000000060000002D000000090000003000000003000000310000000300000032000000020000003300000002000000340000000600000035000000030000003700000004000000380000000100000039000000020000007C000000850000001100000029000000D30C7890FB1D0E6E4B4C35DF1775BDAA90";
-    let out = from_string(hex);
+    let start = std::time::Instant::now();
 
-    println!("{:#}", out);
+    let hex ="81000000000000000B000000060000002D000000090000003000000003000000310000000300000032000000020000003300000002000000340000000600000035000000030000003700000004000000380000000100000039000000020000007C000000850000001100000029000000D30C7890FB1D0E6E4B4C35DF1775BDAA90";
+    let binding = hex_to_bytes(hex).unwrap();
+    let bytes = binding.as_slice();
+
+    let decoded = decode(bytes).unwrap();
+    let end = std::time::Instant::now();
+
+    println!("{:#}", decoded);
+    println!("{:?}", end.duration_since(start));
 }
 
 fn get_freqs(mut bytes: &[u8]) -> (usize, BTreeMap<String, u32>) {
@@ -60,7 +67,18 @@ fn make_tree(freq: BTreeMap<String, u32>) -> Node {
     heap.pop().clone()
 }
 
-fn decode(tree: Node, packed: &[u8], packed_bits: u32) -> Result<String, ()> {
+fn decode(mut bytes: &[u8]) -> Result<String, ()> {
+    let (read, freqs) = get_freqs(bytes);
+    bytes.read_exact(read);
+
+    let tree = make_tree(freqs);
+
+    let s = structure!("<3I");
+    let slice = bytes.read_exact(s.size());
+
+    let (packed_bits, packed_bytes, _): (u32, u32, u32) = s.unpack(slice).unwrap();
+    let packed = bytes.read_exact(packed_bytes as usize);
+
     let mut bits = BitVec::from_bytes(packed);
     bits.truncate(packed_bits as usize);
 
@@ -95,21 +113,4 @@ fn decode(tree: Node, packed: &[u8], packed_bits: u32) -> Result<String, ()> {
     }
 
     Ok(unpacked.join(""))
-}
-
-fn from_string(hex: &str) -> String {
-    let binding = hex_to_bytes(hex).unwrap();
-    let mut bytes = binding.as_slice();
-
-    let (read, freqs) = get_freqs(bytes);
-    bytes.read_exact(read);
-    let tree = make_tree(freqs);
-
-    let s = structure!("<3I");
-    let slice = bytes.read_exact(s.size());
-    let (packed_bits, packed_bytes, _): (u32, u32, u32) = s.unpack(slice).unwrap();
-
-    let packed = bytes.read_exact(packed_bytes as usize);
-
-    decode(tree, packed, packed_bits).unwrap()
 }
